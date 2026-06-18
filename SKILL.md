@@ -91,7 +91,9 @@ Monitor mode only responds to `@mentions` in group chats. DMs are ignored.
 Required env vars (or set in `line_config.json`):
 - `LINE_CHANNEL_SECRET`
 - `LINE_CHANNEL_ACCESS_TOKEN`
-- `LINE_TARGET_GROUP_ID` (optional — restricts to one group)
+- `LINE_TARGET_GROUP_ID` (optional — restricts to one group, legacy)
+- `LINE_ALLOWED_GROUPS` (optional — JSON array of group IDs, e.g. `["C123..."]`)
+- `LINE_ALLOWED_USERS` (optional — JSON array of user IDs, e.g. `["U123..."]`)
 
 The webhook listens on port 5000 (internal) by default.
 

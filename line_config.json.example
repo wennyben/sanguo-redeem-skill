@@ -2,5 +2,7 @@
   "channel_secret": "YOUR_CHANNEL_SECRET_HERE",
   "channel_access_token": "YOUR_CHANNEL_ACCESS_TOKEN_HERE",
   "target_group_id": null,
+  "allowed_users": [],
+  "allowed_groups": [],
   "pattern": "[\\w\\u4e00-\\u9fff]{4,20}"
 }

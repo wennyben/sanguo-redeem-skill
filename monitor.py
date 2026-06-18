@@ -23,6 +23,12 @@ CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
 TARGET_GROUP_ID = os.environ.get("LINE_TARGET_GROUP_ID", None)  # None = all groups
 
+# Allowed users (LINE user IDs) — empty list = allow all
+ALLOWED_USERS = json.loads(os.environ.get("LINE_ALLOWED_USERS", "[]"))
+
+# Allowed groups (LINE group IDs) — empty list = allow all
+ALLOWED_GROUPS = json.loads(os.environ.get("LINE_ALLOWED_GROUPS", "[]"))
+
 # Default pattern: 4-20 alphanumeric/Chinese characters
 REDEMPTION_PATTERN = os.environ.get(
     "REDEMPTION_PATTERN", r"[\w\u4e00-\u9fff]{4,20}"
@@ -36,6 +42,8 @@ if os.path.exists(_config_path) and (not CHANNEL_SECRET or not CHANNEL_ACCESS_TO
     CHANNEL_SECRET = CHANNEL_SECRET or _cfg.get("channel_secret", "")
     CHANNEL_ACCESS_TOKEN = CHANNEL_ACCESS_TOKEN or _cfg.get("channel_access_token", "")
     TARGET_GROUP_ID = TARGET_GROUP_ID or _cfg.get("target_group_id", None)
+    ALLOWED_USERS = ALLOWED_USERS or _cfg.get("allowed_users", [])
+    ALLOWED_GROUPS = ALLOWED_GROUPS or _cfg.get("allowed_groups", [])
     REDEMPTION_PATTERN = REDEMPTION_PATTERN or _cfg.get(
         "pattern", r"[\w\u4e00-\u9fff]{4,20}"
     )
@@ -144,8 +152,14 @@ def callback():
         if source.get("type") != "group":
             continue
 
-        # ── Optional: filter by target group ────────────────────────────
-        if TARGET_GROUP_ID and source.get("groupId") != TARGET_GROUP_ID:
+        group_id = source.get("groupId", "")
+
+        # ── Optional: filter by allowed groups ───────────────────────────
+        if ALLOWED_GROUPS and group_id not in ALLOWED_GROUPS:
+            continue
+
+        # ── Optional: filter by target group (legacy) ────────────────────
+        if TARGET_GROUP_ID and group_id != TARGET_GROUP_ID:
             continue
 
         # ── Handle join event (bot added to group) ──────────────────────
@@ -169,6 +183,11 @@ def callback():
         mention = message.get("mention")
         if not mention:
             continue  # not mentioned, ignore
+
+        # ── Filter by allowed users ─────────────────────────────────────
+        sender_id = source.get("userId", "")
+        if ALLOWED_USERS and sender_id not in ALLOWED_USERS:
+            continue  # sender not in allowlist, ignore
 
         text = message.get("text", "")
         reply_token = event.get("replyToken", "")
