@@ -126,7 +126,11 @@ export REDEMPTION_PATTERN="[\\w\\u4e00-\\u9fff]{4,20}"  # 選填
 
 1. 在 LINE Developers Console 中，設定 Webhook URL 為：`https://你的網域/callback`
 2. 啟用 Webhook
-3. 如果使用本地測試，可以使用 [ngrok](https://ngrok.com/) 等工具建立隧道：
+3. 如果伺服器在容器內，用外部 port（例如 8646）轉發到容器內的 5000：
+   ```
+   外部 8646 → Nginx/反向代理 → 容器 5000
+   ```
+4. 如果使用本地測試，可以使用 [ngrok](https://ngrok.com/) 等工具建立隧道：
    ```bash
    ngrok http 5000
    ```
