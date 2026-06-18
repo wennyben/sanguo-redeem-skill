@@ -1,11 +1,11 @@
 ---
 name: sanguo-redeem
-description: Redeem Sanguo game gift codes for configured HK users. Use when the user mentions 三國志,三國,Sanguo,禮包碼,兌換碼,redemption codes, or asks to redeem a code.
+description: Redeem Sanguo game gift codes for configured users. Use when the user mentions 三國志,三國,Sanguo,禮包碼,兌換碼,redemption codes, or asks to redeem a code.
 ---
 
 # Sanguo Redeem
 
-Use this skill to redeem a Sanguo gift code for the configured HK player list.
+Use this skill to redeem a Sanguo gift code for the configured player list.
 
 This skill is mounted read-only from the git repo at `/opt/data/skills/sanguo`. Hermes keeps bundled skills in the same parent directory; do not try to edit skill files inside the container. Change the repo on the host, then redeploy or recreate the container.
 
@@ -33,7 +33,7 @@ The real `user.json` is account data, not skill source. Keep it outside git at:
 
 The container sets `SANGUO_USERS_FILE=/opt/data/sanguo/user.json`, so the script loads that file by default. For local testing, either set `SANGUO_USERS_FILE` or pass `--users-file`.
 
-Use `hkusers.example.json` only as the schema template:
+Use `users.example.json` only as the schema template:
 
 ```json
 [

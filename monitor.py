@@ -19,7 +19,15 @@ app = Flask(__name__)
 
 CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
-TARGET_GROUP_ID = os.environ.get("LINE_TARGET_GROUP_ID", None)  # None = all groups
+
+# Allowed group IDs (list). Empty list = allow all groups.
+ALLOWED_GROUPS = json.loads(os.environ.get("LINE_ALLOWED_GROUPS", "[]"))
+
+# Allowed sender user IDs (list). Empty list = allow all.
+ALLOWED_SENDERS = json.loads(os.environ.get("LINE_ALLOWED_SENDERS", "[]"))
+
+# Parse allowed senders into a set for O(1) lookup
+ALLOWED_SENDERS_SET = set(ALLOWED_SENDERS)
 
 # Default pattern: 4-20 alphanumeric/Chinese characters
 REDEMPTION_PATTERN = os.environ.get(
@@ -33,7 +41,9 @@ if os.path.exists(_config_path) and (not CHANNEL_SECRET or not CHANNEL_ACCESS_TO
         _cfg = json.load(f)
     CHANNEL_SECRET = CHANNEL_SECRET or _cfg.get("channel_secret", "")
     CHANNEL_ACCESS_TOKEN = CHANNEL_ACCESS_TOKEN or _cfg.get("channel_access_token", "")
-    TARGET_GROUP_ID = TARGET_GROUP_ID or _cfg.get("target_group_id", None)
+    ALLOWED_GROUPS = ALLOWED_GROUPS or _cfg.get("allowed_groups", [])
+    ALLOWED_SENDERS = ALLOWED_SENDERS or _cfg.get("allowed_users", [])
+    ALLOWED_SENDERS_SET = set(ALLOWED_SENDERS)
     REDEMPTION_PATTERN = REDEMPTION_PATTERN or _cfg.get(
         "pattern", r"[\w\u4e00-\u9fff]{4,20}"
     )
@@ -145,8 +155,9 @@ def callback():
         if source.get("type") != "group":
             continue
 
-        # ── Optional: filter by target group ────────────────────────────
-        if TARGET_GROUP_ID and source.get("groupId") != TARGET_GROUP_ID:
+        # ── Optional: filter by allowed groups ───────────────────────────
+        group_id = source.get("groupId", "")
+        if ALLOWED_GROUPS and group_id not in ALLOWED_GROUPS:
             continue
 
         # ── Handle join event (bot added to group) ──────────────────────
@@ -171,6 +182,12 @@ def callback():
         mention = message.get("mention")
         if not mention:
             continue  # not mentioned, ignore
+
+        # ── Check sender ────────────────────────────────────────────────
+        sender_id = source.get("userId", "")
+        if ALLOWED_SENDERS_SET and sender_id not in ALLOWED_SENDERS_SET:
+            print(f"[monitor] Ignoring message from unauthorized sender: {sender_id}")
+            continue
 
         text = message.get("text", "")
         reply_token = event.get("replyToken", "")
@@ -226,8 +243,8 @@ def callback():
 def run_server(host: str = "0.0.0.0", port: int = 5000):
     """Start the webhook server."""
     print(f"[monitor] Starting LINE Bot webhook server on {host}:{port}")
-    if TARGET_GROUP_ID:
-        print(f"[monitor] Filtered to group: {TARGET_GROUP_ID}")
+    if ALLOWED_GROUPS:
+        print(f"[monitor] Filtered to groups: {ALLOWED_GROUPS}")
     else:
         print(f"[monitor] Listening to all groups")
     app.run(host=host, port=port, debug=False)
