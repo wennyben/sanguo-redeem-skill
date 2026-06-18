@@ -96,8 +96,8 @@ Examples:
             monitor = importlib.import_module("monitor")
         except ImportError:
             print(
-                "Error: monitor mode requires monitor.py, which is not included in this skill.",
-                file=sys.stderr
+                "Error: monitor mode requires monitor.py and flask. Install with: pip install flask",
+                file=sys.stderr,
             )
             sys.exit(1)
         monitor.run_server(port=args.port)

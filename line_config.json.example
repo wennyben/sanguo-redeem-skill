@@ -1,0 +1,6 @@
+{
+  "channel_secret": "YOUR_CHANNEL_SECRET",
+  "channel_access_token": "YOUR_CHANNEL_ACCESS_TOKEN",
+  "target_group_id": null,
+  "pattern": "[\\w\\u4e00-\\u9fff]{4,20}"
+}
