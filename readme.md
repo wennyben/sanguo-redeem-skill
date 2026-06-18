@@ -32,13 +32,14 @@ pip install requests flask line-bot-sdk
 
 ### 1. 設定玩家資料
 
-編輯 `hkusers.json` 檔案，填入你的遊戲資料：
+編輯 `user.json` 檔案，填入你的遊戲資料：
 
 ```json
 [
     {
         "player_id": "你的角色編號",
-        "player_name": "你的角色名稱"
+        "player_name": "你的角色名稱",
+        "region": "hk"
     }
 ]
 ```
@@ -51,16 +52,34 @@ pip install requests flask line-bot-sdk
 [
     {
         "player_id": "123456",
-        "player_name": "玩家A"
+        "player_name": "玩家A",
+        "region": "hk"
     },
     {
         "player_id": "789012",
-        "player_name": "玩家B"
+        "player_name": "玩家B",
+        "region": "hk"
     }
 ]
 ```
 
 > ⚠️ **注意**：角色名稱需與遊戲內完全一致，包含特殊字符（如 `丨` 不等於 `|`）
+
+> 💡 `region` 欄位預設為 `"hk"`，如未填寫會自動使用 `"hk"`。
+
+#### 環境變數
+
+你也可以透過環境變數指定 `user.json` 路徑：
+
+```bash
+export SANGUO_USERS_FILE="/opt/data/sanguo/user.json"
+```
+
+或使用命令列參數 `--users-file`：
+
+```bash
+python main.py --code "ABC123" --users-file /path/to/user.json
+```
 
 ### 2. 設定 LINE Bot（僅監控模式需要）
 
@@ -126,6 +145,9 @@ uv run main.py --code "新年快樂2024"
 
 # 只為特定帳號兌換（使用索引，從 0 開始）
 uv run main.py --code "ABC123XYZ" --user-index 0
+
+# 指定 user.json 路徑
+uv run main.py --code "ABC123XYZ" --users-file /path/to/user.json
 ```
 
 > 💡 也可以使用 `python main.py` 如果已經安裝依賴
@@ -158,14 +180,14 @@ uv run main.py --monitor --port 8080
 
 系統會自動：
 1. 偵測到 `ABC123XYZ` 符合兌換碼模式
-2. 為所有 `hkusers.json` 中的帳號進行兌換
+2. 為所有 `user.json` 中的帳號進行兌換
 3. 在群組中回覆結果：
    ```
    🎁 兌換碼: ABC123XYZ
    📊 結果: 10 成功, 0 失敗
-   
-   ✅ 喵寶丨銀子: 禮包獎勵: 金幣x1000
-   ✅ 鬼丨初始: 禮包獎勵: 金幣x1000
+
+   ✅ 玩家A: 禮包獎勵: 金幣x1000
+   ✅ 玩家B: 禮包獎勵: 金幣x1000
    ...
    ```
 
@@ -176,7 +198,8 @@ uv run main.py --monitor --port 8080
 | 參數 | 必填 | 說明 |
 |------|------|------|
 | `--code` | ✅ | 禮包兌換碼（CLI 模式必填） |
-| `--user-index` | ❌ | 指定 users.json 中的帳號索引（預設：兌換所有帳號）|
+| `--user-index` | ❌ | 指定 user.json 中的帳號索引（預設：兌換所有帳號）|
+| `--users-file` | ❌ | user.json 路徑（預設：SANGUO_USERS_FILE 或 ./user.json）|
 
 #### 監控模式參數
 
@@ -200,7 +223,7 @@ uv run main.py --help
 👥 Processing 1 user(s)
 ==================================================
 
-📤 User: 喵寶丨銀子 (ID: 658957)
+📤 User: 玩家A (ID: 123456, Region: hk)
    Status: 200
    Response: {
      "code": 200,
@@ -219,7 +242,7 @@ uv run main.py --help
 👥 Processing 1 user(s)
 ==================================================
 
-📤 User: 喵寶丨銀子 (ID: 658957)
+📤 User: 玩家A (ID: 123456, Region: hk)
    Status: 200
    Response: {
      "code": 419,
@@ -246,4 +269,3 @@ uv run main.py --help
 ## License
 
 MIT
-
