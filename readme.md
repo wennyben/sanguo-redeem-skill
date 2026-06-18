@@ -186,7 +186,7 @@ uv run main.py --monitor --port 8080
    🎁 兌換碼: ABC123XYZ
    📊 結果: 10 成功, 0 失敗
 
-   ✅ 喵寶丨銀子: 禮包獎勵: 金幣x1000
+   ✅ 鬼丨V伯: 禮包獎勵: 金幣x1000
    ✅ 鬼丨初始: 禮包獎勵: 金幣x1000
    ...
    ```
@@ -223,7 +223,7 @@ uv run main.py --help
 👥 Processing 1 user(s)
 ==================================================
 
-📤 User: 喵寶丨銀子 (ID: 658957, Region: hk)
+📤 User: 鬼丨V伯 (ID: 649064, Region: hk)
    Status: 200
    Response: {
      "code": 200,
@@ -242,7 +242,7 @@ uv run main.py --help
 👥 Processing 1 user(s)
 ==================================================
 
-📤 User: 喵寶丨銀子 (ID: 658957, Region: hk)
+📤 User: 鬼丨V伯 (ID: 649064, Region: hk)
    Status: 200
    Response: {
      "code": 419,
