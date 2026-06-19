@@ -2,15 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 LINE Bot webhook server for Sanguo code redemption.
-Only responds to @mentions in group chats.
+Listens for group chat webhooks and only responds when the event is allowed.
 """
 
 import json
 import os
 import re
 import sys
-
-import requests
 from flask import Flask, request, abort
 
 from redeem import process_redemption
@@ -21,13 +19,15 @@ app = Flask(__name__)
 
 CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
-TARGET_GROUP_ID = os.environ.get("LINE_TARGET_GROUP_ID", None)  # None = all groups
 
-# Allowed users (LINE user IDs) — empty list = allow all
-ALLOWED_USERS = json.loads(os.environ.get("LINE_ALLOWED_USERS", "[]"))
-
-# Allowed groups (LINE group IDs) — empty list = allow all
+# Allowed group IDs (list). Empty list = allow all groups.
 ALLOWED_GROUPS = json.loads(os.environ.get("LINE_ALLOWED_GROUPS", "[]"))
+
+# Allowed sender user IDs (list). Empty list = allow all.
+ALLOWED_SENDERS = json.loads(os.environ.get("LINE_ALLOWED_SENDERS", "[]"))
+
+# Parse allowed senders into a set for O(1) lookup
+ALLOWED_SENDERS_SET = set(ALLOWED_SENDERS)
 
 # Default pattern: 4-20 alphanumeric/Chinese characters
 REDEMPTION_PATTERN = os.environ.get(
@@ -41,18 +41,31 @@ if os.path.exists(_config_path) and (not CHANNEL_SECRET or not CHANNEL_ACCESS_TO
         _cfg = json.load(f)
     CHANNEL_SECRET = CHANNEL_SECRET or _cfg.get("channel_secret", "")
     CHANNEL_ACCESS_TOKEN = CHANNEL_ACCESS_TOKEN or _cfg.get("channel_access_token", "")
-    TARGET_GROUP_ID = TARGET_GROUP_ID or _cfg.get("target_group_id", None)
-    ALLOWED_USERS = ALLOWED_USERS or _cfg.get("allowed_users", [])
     ALLOWED_GROUPS = ALLOWED_GROUPS or _cfg.get("allowed_groups", [])
+    ALLOWED_SENDERS = ALLOWED_SENDERS or _cfg.get("allowed_users", [])
+    ALLOWED_SENDERS_SET = set(ALLOWED_SENDERS)
     REDEMPTION_PATTERN = REDEMPTION_PATTERN or _cfg.get(
         "pattern", r"[\w\u4e00-\u9fff]{4,20}"
     )
 
+# Merge config file even when env vars exist, so allowed_groups / allowed_users can
+# be maintained in line_config.json without requiring environment variables.
+if os.path.exists(_config_path):
+    with open(_config_path, "r", encoding="utf-8") as f:
+        _cfg = json.load(f)
+    ALLOWED_GROUPS = ALLOWED_GROUPS or _cfg.get("allowed_groups", [])
+    ALLOWED_SENDERS = ALLOWED_SENDERS or _cfg.get("allowed_users", [])
+    ALLOWED_SENDERS_SET = set(ALLOWED_SENDERS)
+    REDEMPTION_PATTERN = REDEMPTION_PATTERN or _cfg.get(
+        "pattern", r"[\w\u4e00-\u9fff]{4,20}"
+    )
 
 # ── LINE Bot helpers ────────────────────────────────────────────────────
 
 def reply_message(reply_token: str, messages: list):
     """Send a reply message via LINE Messaging API."""
+    import requests
+
     url = "https://api.line.me/v2/bot/message/reply"
     headers = {
         "Content-Type": "application/json",
@@ -69,6 +82,8 @@ def reply_message(reply_token: str, messages: list):
 
 def push_message(group_id: str, messages: list):
     """Send a push message to a group (no replyToken needed)."""
+    import requests
+
     url = "https://api.line.me/v2/bot/message/push"
     headers = {
         "Content-Type": "application/json",
@@ -83,7 +98,7 @@ def push_message(group_id: str, messages: list):
         print(f"[LINE] push failed: {resp.status_code} {resp.text}", file=sys.stderr)
 
 
-def verify_signature(body_bytes: bytes, signature: str) -> bool:
+def verify_signature(body: bytes, signature: str) -> bool:
     """Verify LINE webhook signature."""
     import base64
     import hashlib
@@ -94,7 +109,7 @@ def verify_signature(body_bytes: bytes, signature: str) -> bool:
 
     hash_val = hmac.new(
         CHANNEL_SECRET.encode("utf-8"),
-        body_bytes,
+        body,
         hashlib.sha256,
     ).digest()
     expected = base64.b64encode(hash_val).decode("utf-8")
@@ -103,12 +118,37 @@ def verify_signature(body_bytes: bytes, signature: str) -> bool:
 
 # ── Code extraction ─────────────────────────────────────────────────────
 
-def extract_code(text: str):
+def extract_code(text: str) -> str | None:
     """Extract a redemption code from message text."""
     # Remove @mention prefixes (e.g. "@BotName ")
     text = re.sub(r"@\S+\s*", "", text).strip()
     match = re.search(REDEMPTION_PATTERN, text)
     return match.group(0) if match else None
+
+
+def bot_was_mentioned(message: dict) -> bool:
+    """Return True only when the bot itself appears in mention.mentionees.
+
+    Some LINE webhook payloads may contain a mention object even when the bot was
+    not actually addressed. To avoid false positives, compare the mentionee IDs
+    against the bot's own userId when it is available from the API.
+    """
+    mention = message.get("mention")
+    if not mention:
+        return False
+
+    mentionees = mention.get("mentionees") or []
+    if not mentionees:
+        return False
+
+    bot_user_id = os.environ.get("LINE_BOT_USER_ID", "").strip()
+    if not bot_user_id:
+        return False
+
+    for mentionee in mentionees:
+        if mentionee.get("userId") == bot_user_id:
+            return True
+    return False
 
 
 # ── User loading ────────────────────────────────────────────────────────
@@ -152,18 +192,14 @@ def callback():
         if source.get("type") != "group":
             continue
 
-        group_id = source.get("groupId", "")
-
         # ── Optional: filter by allowed groups ───────────────────────────
+        group_id = source.get("groupId", "")
         if ALLOWED_GROUPS and group_id not in ALLOWED_GROUPS:
-            continue
-
-        # ── Optional: filter by target group (legacy) ────────────────────
-        if TARGET_GROUP_ID and group_id != TARGET_GROUP_ID:
             continue
 
         # ── Handle join event (bot added to group) ──────────────────────
         if event_type == "join":
+            group_id = source.get("groupId", "")
             reply_token = event.get("replyToken", "")
             if reply_token:
                 reply_message(reply_token, [
@@ -179,18 +215,19 @@ def callback():
         if message.get("type") != "text":
             continue
 
-        # ── Only respond to @mentions ───────────────────────────────────
-        mention = message.get("mention")
-        if not mention:
-            continue  # not mentioned, ignore
+        # ── Only respond when the bot itself was @mentioned ─────────────
+        if not bot_was_mentioned(message):
+            continue
 
-        # ── Filter by allowed users ─────────────────────────────────────
+        # ── Check sender ────────────────────────────────────────────────
         sender_id = source.get("userId", "")
-        if ALLOWED_USERS and sender_id not in ALLOWED_USERS:
-            continue  # sender not in allowlist, ignore
+        if ALLOWED_SENDERS_SET and sender_id not in ALLOWED_SENDERS_SET:
+            print(f"[monitor] Ignoring message from unauthorized sender: {sender_id}")
+            continue
 
         text = message.get("text", "")
         reply_token = event.get("replyToken", "")
+        group_id = source.get("groupId", "")
 
         # Extract redemption code
         code = extract_code(text)
@@ -239,13 +276,15 @@ def callback():
 
 # ── Entry point ─────────────────────────────────────────────────────────
 
-def run_server(host: str = "0.0.0.0", port: int = 5000):
+def run_server(host: str = "0.0.0.0", port: int = 8646):
     """Start the webhook server."""
     print(f"[monitor] Starting LINE Bot webhook server on {host}:{port}")
-    if TARGET_GROUP_ID:
-        print(f"[monitor] Filtered to group: {TARGET_GROUP_ID}")
+    if ALLOWED_GROUPS:
+        print(f"[monitor] Filtered to groups: {ALLOWED_GROUPS}")
     else:
         print(f"[monitor] Listening to all groups")
+    if not os.environ.get("LINE_BOT_USER_ID", "").strip():
+        print("[monitor] Warning: LINE_BOT_USER_ID is not set; mention filtering falls back to presence-only checks")
     app.run(host=host, port=port, debug=False)
 
 
